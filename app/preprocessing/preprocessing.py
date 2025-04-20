@@ -1,55 +1,47 @@
 import os
 import numpy as np
 import cv2
-import mediapipe as mp
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from mtcnn import MTCNN
+import random
 
 # Parameter dasar
 IMAGE_SIZE = (224, 224)
-DATA_DIR = "data/face_skin_type"
+DATA_DIR = "app/data"
 CLASSES = os.listdir(DATA_DIR)
 
-# Setup Mediapipe Face Detection
-mp_face_detection = mp.solutions.face_detection
-mp_drawing = mp.solutions.drawing_utils
+detector = MTCNN()
 
-def detect_and_crop_face_mediapipe(image):
-    with mp_face_detection.FaceDetection(model_selection=0, min_detection_confidence=0.5) as face_detection:
-        results = face_detection.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-
-        if results.detections:
-            # Ambil bounding box pertama
-            detection = results.detections[0]
-            bbox = detection.location_data.relative_bounding_box
-            h, w, _ = image.shape
-            x_min = int(bbox.xmin * w)
-            y_min = int(bbox.ymin * h)
-            box_width = int(bbox.width * w)
-            box_height = int(bbox.height * h)
-
-            # Pastikan bounding box valid
-            x_min = max(x_min, 0)
-            y_min = max(y_min, 0)
-            x_max = min(x_min + box_width, w)
-            y_max = min(y_min + box_height, h)
-
-            face_img = image[y_min:y_max, x_min:x_max]
-            return face_img
-        else:
-            return None
-
-def load_and_preprocess_image(img_path):
-    img = cv2.imread(img_path)
-    face = detect_and_crop_face_mediapipe(img)
-    
-    if face is None:
-        print(f"[SKIP] Tidak ada wajah terdeteksi: {img_path}")
+def detect_and_crop_face(image):
+    results = detector.detect_faces(image)
+    if not results:
         return None
 
+    x, y, w, h = results[0]['box']
+    x, y = max(0, x), max(0, y)
+    face = image[y:y+h, x:x+w]
     face = cv2.resize(face, IMAGE_SIZE)
     face = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)
     face = face.astype('float32') / 255.0
     return face
+
+def preprocess_image_for_prediction(img_path):
+    """
+    Fungsi preprocessing satu gambar (misalnya dipakai saat user upload)
+    Return: image dalam bentuk array (1, 224, 224, 3) siap untuk model.predict()
+    """
+    img = cv2.imread(img_path)
+    if img is None:
+        print(f"[ERROR] Gagal membaca gambar: {img_path}")
+        return None
+
+    face = detect_and_crop_face(img)
+    if face is not None:
+        face = np.expand_dims(face, axis=0)  # bentuk jadi (1, 224, 224, 3)
+        print(f"[INFO] Wajah terdeteksi: {img_path}")
+        return face
+    else:
+        print(f"[ERROR] Wajah tidak terdeteksi di: {img_path}")
+        return None
 
 def load_dataset():
     images = []
@@ -60,30 +52,49 @@ def load_dataset():
         for fname in os.listdir(class_dir):
             if fname.lower().endswith(('.png', '.jpg', '.jpeg')):
                 img_path = os.path.join(class_dir, fname)
-                img = load_and_preprocess_image(img_path)
-                if img is not None:
-                    images.append(img)
+                img = cv2.imread(img_path)
+                if img is None:
+                    print(f"[SKIP] Gagal membaca gambar: {img_path}")
+                    continue
+
+                face = detect_and_crop_face(img)
+                if face is not None:
+                    face = augment_image(face)  # Menambahkan augmentasi di sini
+                    images.append(face)
                     labels.append(idx)
+                    print(f"[INFO] Wajah terdeteksi: {img_path}")
+                else:
+                    print(f"[SKIP] Tidak ada wajah terdeteksi: {img_path}")
 
     return np.array(images), np.array(labels)
 
-# Load dataset
+def augment_image(image):
+    """
+    Fungsi augmentasi gambar (misalnya rotasi, flipping, dsb)
+    """
+    # Rotasi acak antara 0, 90, 180, dan 270 derajat
+    rotate_angle = random.choice([0, 90, 180, 270])
+    augmented_image = cv2.rotate(image, rotate_angle)
+    
+    # Flipping acak (horizontal atau vertikal)
+    if random.choice([True, False]):
+        augmented_image = cv2.flip(augmented_image, 1)  # Flipping horizontal
+    else:
+        augmented_image = cv2.flip(augmented_image, 0)  # Flipping vertical
+
+    # Perubahan kecerahan (menambah atau mengurangi brightness)
+    brightness_factor = random.uniform(0.7, 1.3)
+    augmented_image = cv2.convertScaleAbs(augmented_image, alpha=brightness_factor, beta=0)
+
+    return augmented_image
+
+
+# Load dan proses dataset
 X, y = load_dataset()
-print(f"Total data wajah terdeteksi: {len(X)}")
+print(f"Total wajah terdeteksi: {len(X)}")
 print(f"Bentuk X: {X.shape}, y: {y.shape}")
 
-# Augmentasi opsional
-augment = True
-if augment:
-    datagen = ImageDataGenerator(
-        rotation_range=10,
-        zoom_range=0.1,
-        width_shift_range=0.1,
-        height_shift_range=0.1,
-        horizontal_flip=True
-    )
-    datagen.fit(X)
-
-# Simpan hasil preprocessing
-np.save("preprocessed_faces_mediapipe.npy", X)
-np.save("preprocessed_labels_mediapipe.npy", y)
+# Simpan hasil
+np.save("app/fix-dataset/preprocessed_faces.npy", X)
+np.save("app/fix-dataset/preprocessed_labels.npy", y)
+print("[INFO] Dataset telah disimpan.")
