@@ -1,13 +1,13 @@
 # Facial Classification Project
 
 This repository contains a PyTorch-based facial classification project.
-Dataset : [Dataset Link](https://drive.google.com/drive/folders/1yOA85V1-gOsK3zgnBDuqwitWoNxPBNOg)
 
 ---
 
 ## How to Run
 
 1. **Download the Dataset**  
+   - Dataset : [Dataset Link](https://drive.google.com/drive/folders/1yOA85V1-gOsK3zgnBDuqwitWoNxPBNOg)
    - Download the two files (`labels.npy` and `faces.npy`) from the provided link.
    - Place these files under `app/data`.
 
