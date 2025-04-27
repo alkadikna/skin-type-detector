@@ -1,127 +1,163 @@
+import os
+from datetime import datetime
+import pickle
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
-from tqdm import tqdm
-import matplotlib.pyplot as plt
+import torch.optim as optim
+from torch.utils.data import Dataset, DataLoader
+from torchvision import transforms
+from torchvision.models import efficientnet_v2_s, EfficientNet_V2_S_Weights
+from tqdm.auto import tqdm
 from copy import deepcopy
-import os
-from config import EPOCHS, LR, STEP, GAMMA, DEVICE, MODEL_SAVE_PATH
+from sklearn.model_selection import train_test_split
 
-def train_model(model, train_dl, val_dl, save_path=MODEL_SAVE_PATH):
-    """Train the model and return training history and best model"""
-    
-    # Make sure the save directory exists
-    os.makedirs(save_path, exist_ok=True)
-    
-    # Move model to device
-    model = model.to(DEVICE)
-    
-    # Loss function and optimizer
+os.makedirs("models", exist_ok=True)
+os.makedirs("artifacts", exist_ok=True)
+
+FILEPATH = "app/data"
+faces = np.load(f"{FILEPATH}/preprocessed_faces.npy")
+labels = np.load(f"{FILEPATH}/preprocessed_labels.npy")
+
+EPOCHS = 75
+BATCH = 32
+OUT_CLASSES = 4
+IMG_SIZE = 224
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+train_transform = transforms.Compose([
+    transforms.ToPILImage(),
+    transforms.ToTensor(),
+    transforms.Resize((IMG_SIZE, IMG_SIZE)),
+    transforms.RandomVerticalFlip(0.6),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                         std=[0.229, 0.224, 0.225])
+])
+
+transform = transforms.Compose([
+    transforms.ToPILImage(),
+    transforms.ToTensor(),
+    transforms.Resize((IMG_SIZE, IMG_SIZE)),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                         std=[0.229, 0.224, 0.225])
+])
+
+faces_train, faces_temp, labels_train, labels_temp = train_test_split(
+    faces, labels, test_size=0.2, random_state=42
+)
+faces_val, faces_test, labels_val, labels_test = train_test_split(
+    faces_temp, labels_temp, test_size=0.5, random_state=42
+)
+
+class NPYDataset(Dataset):
+    def __init__(self, data, labels, transform=None):
+        self.data = data
+        self.labels = labels
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        img = self.data[idx]
+        label = self.labels[idx]
+        if self.transform:
+            img = self.transform(img)
+        return img, label
+
+train_ds = NPYDataset(faces_train, labels_train, train_transform)
+val_ds = NPYDataset(faces_val, labels_val, transform)
+test_ds = NPYDataset(faces_test, labels_test, transform)
+
+train_dl = DataLoader(train_ds, batch_size=BATCH, shuffle=True)
+val_dl = DataLoader(val_ds, batch_size=BATCH, shuffle=False)
+test_dl = DataLoader(test_ds, batch_size=BATCH, shuffle=False)
+
+effnet = efficientnet_v2_s(weights=EfficientNet_V2_S_Weights.IMAGENET1K_V1)
+num_ftrs = effnet.classifier[1].in_features
+effnet.classifier[1] = nn.Linear(num_ftrs, OUT_CLASSES)
+
+def train_model(model, epochs, train_loader, val_loader):
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=LR)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=STEP, gamma=GAMMA)
-    
-    # Track best model and metrics
-    best_model = deepcopy(model)
-    best_acc = 0
-    
-    # Training history
-    history = {
-        'train_loss': [],
-        'train_acc': [],
-        'val_loss': [],
-        'val_acc': []
-    }
-    
-    # Training loop
-    for epoch in range(1, EPOCHS + 1):
-        # Training phase
+    optimizer = optim.SGD(model.parameters(), lr=0.079603)
+    best_val_loss = float('inf')
+
+    train_losses, val_losses = [], []
+    train_accs, val_accs = [], []
+
+    for epoch in range(1, epochs + 1):
         model.train()
-        running_loss = 0.0
-        correct = 0
-        total = 0
-        
-        for data, target in tqdm(train_dl, desc=f"Epoch {epoch} Training", leave=False):
+        running_loss, correct, total = 0.0, 0, 0
+
+        for data, target in tqdm(train_loader, desc=f"Epoch {epoch} Training"):
+            data, target = data.to(device), target.to(device)
             optimizer.zero_grad()
-            data, target = data.to(DEVICE), target.to(DEVICE)
-            
             outputs = model(data)
             loss = criterion(outputs, target)
             loss.backward()
             optimizer.step()
-            
+
             running_loss += loss.item() * data.size(0)
             correct += (outputs.argmax(1) == target).sum().item()
             total += data.size(0)
-        
-        epoch_train_loss = running_loss / total
-        epoch_train_acc = correct / total
-        history['train_loss'].append(epoch_train_loss)
-        history['train_acc'].append(epoch_train_acc)
-        
-        # Validation phase
+
+        train_loss = running_loss / total
+        train_acc = correct / total
+
         model.eval()
-        running_loss = 0.0
-        correct = 0
-        total = 0
-        
+        val_running, val_correct, val_tot = 0.0, 0, 0
         with torch.no_grad():
-            for data, target in tqdm(val_dl, desc=f"Epoch {epoch} Validation", leave=False):
-                data, target = data.to(DEVICE), target.to(DEVICE)
-                
+            for data, target in tqdm(val_loader, desc=f"Epoch {epoch} Validation"):
+                data, target = data.to(device), target.to(device)
                 outputs = model(data)
                 loss = criterion(outputs, target)
-                
-                running_loss += loss.item() * data.size(0)
-                correct += (outputs.argmax(1) == target).sum().item()
-                total += data.size(0)
-        
-        epoch_val_loss = running_loss / total
-        epoch_val_acc = correct / total
-        history['val_loss'].append(epoch_val_loss)
-        history['val_acc'].append(epoch_val_acc)
-        
-        # Save best model
-        if epoch_val_acc > best_acc:
-            best_acc = epoch_val_acc
-            best_model = deepcopy(model)
-            # Save the checkpoint
-            model_path = os.path.join(save_path, f"best_model_epoch_{epoch}.pth")
-            best_model.save(model_path)
-        
-        # Update learning rate
-        scheduler.step()
-        
-        # Print epoch results
-        print(f"Epoch {epoch} | Train Loss: {epoch_train_loss:.4f} | Train Acc: {epoch_train_acc*100:.2f}% "
-              f"| Val Loss: {epoch_val_loss:.4f} | Val Acc: {epoch_val_acc*100:.2f}%")
-    
-    # Save final model
-    final_model_path = os.path.join(save_path, "final_model.pth")
-    model.save(final_model_path)
-    
-    # Save best model
-    best_model_path = os.path.join(save_path, "best_model.pth")
-    best_model.save(best_model_path)
-    
-    return best_model, history
+                val_running += loss.item() * data.size(0)
+                val_correct += (outputs.argmax(1) == target).sum().item()
+                val_tot += data.size(0)
 
-def plot_training_history(history):
-    """Plot training and validation loss and accuracy"""
-    epochs = list(range(1, len(history['train_loss']) + 1))
-    
-    fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(12, 7))
-    
-    # Plot loss
-    axes[0].plot(epochs, history['train_loss'])
-    axes[0].plot(epochs, history['val_loss'])
-    axes[0].legend(["Training", "Validation"])
-    axes[0].set_title("Loss log")
-    
-    # Plot accuracy
-    axes[1].plot(epochs, history['train_acc'])
-    axes[1].plot(epochs, history['val_acc'])
-    axes[1].legend(["Training", "Validation"])
-    axes[1].set_title("Accuracy log")
-    
-    plt.tight_layout()
-    plt.show()
+        val_loss = val_running / val_tot
+        val_acc = val_correct / val_tot
+
+        train_losses.append(train_loss)
+        val_losses.append(val_loss)
+        train_accs.append(train_acc)
+        val_accs.append(val_acc)
+
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+
+        print(f"Epoch {epoch}/{epochs} => "
+              f"Train Loss: {train_loss:.4f}, Train Acc: {train_acc*100:.2f}%, "
+              f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc*100:.2f}%")
+
+    plt.figure(figsize=(12, 5))
+    plt.subplot(1, 2, 1)
+    plt.plot(train_losses, label="Train Loss")
+    plt.plot(val_losses, label="Val Loss")
+    plt.title("Loss Curve")
+    plt.legend()
+
+    plt.subplot(1, 2, 2)
+    plt.plot(train_accs, label="Train Acc")
+    plt.plot(val_accs, label="Val Acc")
+    plt.title("Accuracy Curve")
+    plt.legend()
+
+    plt.savefig("artifacts/training_artifact.png")
+    plt.close()
+
+    return model
+
+if __name__ == "__main__":
+    model = deepcopy(effnet).to(device)
+    trained_model = train_model(model, EPOCHS, train_dl, val_dl)
+    current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+    model_filename = f"models/facial_model_{current_time}.pkl"
+
+    print("Training complete. Saving the model as:", model_filename)
+    with open(model_filename, "wb") as f:
+        pickle.dump(trained_model, f)
+
+    print("Model has been saved successfully.")
