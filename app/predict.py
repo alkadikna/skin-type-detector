@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 from torchvision import transforms
 from PIL import Image
+import torch.nn.functional as F
 
 index_label = {
     0: "combination",
@@ -26,13 +27,15 @@ inference_transform = transforms.Compose([
 
 def predict_image(model, img_path):
     image = Image.open(img_path).convert("RGB")
-    image_tensor = inference_transform(image).unsqueeze(0)
+    image_tensor = inference_transform(image).unsqueeze(0).to(device) 
 
     model.eval()
     with torch.no_grad():
         outputs = model(image_tensor)
-        _, predicted = torch.max(outputs.data, 1)
-    return predicted.item()
+        probabilities = F.softmax(outputs, dim=1)
+        confidence, predicted = torch.max(probabilities, 1)
+
+    return predicted.item(), confidence.item()
 
 if __name__ == "__main__":
     model_files = glob.glob(os.path.join("app", "models", "facial_model_*.pkl"))
@@ -44,14 +47,16 @@ if __name__ == "__main__":
     latest_model_path = model_files[0]
     print(f"Loading model from: {latest_model_path}")
 
-    with open(latest_model_path, "rb") as f:
-        model = pickle.load(f)
+    with open(latest_model_path, "rb") as model_file:
+        model = pickle.load(model_file)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = model.to(device)
 
     img_path = input("Enter the path to your image: ").strip()
     if not os.path.exists(img_path):
         print("Image file not found. Please check your path.")
         sys.exit(1)
 
-    predicted_class_idx = predict_image(model, img_path)
+    predicted_class_idx, probability = predict_image(model, img_path)
     predicted_class_name = index_label.get(predicted_class_idx, "Unknown")
-    print(f"Prediction: {predicted_class_name}")
+    print(f"Prediction: {predicted_class_name}, probability: {probability * 100:.2f}%")
