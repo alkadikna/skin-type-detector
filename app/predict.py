@@ -47,6 +47,9 @@ if __name__ == "__main__":
     latest_model_path = model_files[0]
     print(f"Loading model from: {latest_model_path}")
 
+    ## if doenst work manually change the path to the model and comment the line above
+    # latest_model_path = "app/models/model-here.pkl"
+
     with open(latest_model_path, "rb") as model_file:
         model = pickle.load(model_file)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
