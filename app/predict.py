@@ -26,6 +26,8 @@ inference_transform = transforms.Compose([
 ])
 
 def predict_image(model, img_path):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     image = Image.open(img_path).convert("RGB")
     image_tensor = inference_transform(image).unsqueeze(0).to(device) 
 
