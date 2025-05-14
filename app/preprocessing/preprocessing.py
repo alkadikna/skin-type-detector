@@ -88,13 +88,13 @@ def augment_image(image):
 
     return augmented_image
 
+if __name__ == "__main__":
+    # Load dan proses dataset
+    X, y = load_dataset()
+    print(f"Total wajah terdeteksi: {len(X)}")
+    print(f"Bentuk X: {X.shape}, y: {y.shape}")
 
-# Load dan proses dataset
-X, y = load_dataset()
-print(f"Total wajah terdeteksi: {len(X)}")
-print(f"Bentuk X: {X.shape}, y: {y.shape}")
-
-# Simpan hasil
-np.save("app/fix-dataset/preprocessed_faces.npy", X)
-np.save("app/fix-dataset/preprocessed_labels.npy", y)
-print("[INFO] Dataset telah disimpan.")
+    # Simpan hasil
+    np.save("app/fix-dataset/preprocessed_faces.npy", X)
+    np.save("app/fix-dataset/preprocessed_labels.npy", y)
+    print("[INFO] Dataset telah disimpan.")
