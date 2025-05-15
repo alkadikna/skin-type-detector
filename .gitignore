@@ -1,3 +1,5 @@
 /app/models
 __pycache__/
 conv.py
+data/
+
