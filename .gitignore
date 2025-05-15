@@ -1,5 +1,5 @@
-# Ignore the data folder
+/app/models
+__pycache__/
+conv.py
 data/
 
-# Ignore Python cache files
-__pycache__/
