@@ -3,7 +3,8 @@ from bson.objectid import ObjectId
 from datetime import datetime
 import os
 
-MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
+# MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
+MONGO_URL = os.getenv("MONGO_URL", "mongodb://host.docker.internal:27017")
 DATABASE_NAME = "skin-type-detector"
 COLLECTION_NAME = "skin-type-db"
 
@@ -13,10 +14,9 @@ db = client[DATABASE_NAME]
 async def get_db():
     return db
 
-async def save_prediction(db, user_id: str, image_data: bytes, predicted_type: str, confidence: float):
+async def save_prediction(db, user_id: str, predicted_type: str, confidence: float):
     doc = {
         "user_id": user_id,
-        "image_data": image_data,
         "predicted_skin_type": predicted_type,
         "confidence": confidence,
         "created_at": datetime.utcnow(),
