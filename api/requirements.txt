@@ -1,0 +1,12 @@
+numpy
+torch
+torchvision
+mtcnn
+tensorflow
+fastapi
+uvicorn
+python-multipart
+pydantic
+opencv-python
+motor
+prometheus_fastapi_instrumentator

@@ -1,18 +1,18 @@
+import os
 import glob
 import pickle
 import torch
+import cv2
+import numpy as np
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
-import cv2
-import numpy as np
 from io import BytesIO
 from PIL import Image
-import os
-
-# Import fungsi
-from app.preprocessing.preprocessing import detect_and_crop_face
+from prometheus_fastapi_instrumentator import Instrumentator
+# Import functions
+from app.preprocessing.transform import detect_and_crop_face
 from app.predict import predict_image
 from api.database import get_db, save_prediction, update_feedback
 
@@ -32,6 +32,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+Instrumentator().instrument(app).expose(app)
 
 class PredictionResponse(BaseModel):
     skin_type: str
@@ -55,7 +57,7 @@ latest_model_path = model_files[0]
 with open(latest_model_path, "rb") as f:
     model = pickle.load(f)
 
-model = model.to(device)
+model = model.to(torch.device("cpu"))
 model.eval()
 
 # Upload image sama prediksi skin type
@@ -93,7 +95,7 @@ async def predict_skin_type(file: UploadFile = File(...), user_id: str = "anonym
         }
         skin_type = skin_types.get(predicted_class, "unknown")
 
-        prediction_id = await save_prediction(db, user_id, contents, skin_type, confidence)
+        prediction_id = await save_prediction(db, user_id, skin_type, confidence)
 
         return PredictionResponse(
             skin_type=skin_type,
@@ -109,12 +111,12 @@ async def predict_skin_type(file: UploadFile = File(...), user_id: str = "anonym
         raise HTTPException(status_code=500, detail=str(e))
 
 # Buat feedback pengguna
-@app.post("/feedback")
-async def submit_feedback(feedback: FeedbackRequest, db=Depends(get_db)):
-    try:
-        updated = await update_feedback(db, feedback.prediction_id, feedback.actual_skin_type)
-        if not updated:
-            raise HTTPException(status_code=404, detail="Prediksi tidak ditemukan")
-        return {"success": True, "message": "Feedback berhasil disimpan"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# @app.post("/feedback")
+# async def submit_feedback(feedback: FeedbackRequest, db=Depends(get_db)):
+#     try:
+#         updated = await update_feedback(db, feedback.prediction_id, feedback.actual_skin_type)
+#         if not updated:
+#             raise HTTPException(status_code=404, detail="Prediksi tidak ditemukan")
+#         return {"success": True, "message": "Feedback berhasil disimpan"}
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
