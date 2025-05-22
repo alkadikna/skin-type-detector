@@ -1,8 +1,10 @@
 numpy
-torch
-torchvision
+tensorflow-cpu==2.13.0
+torch==2.0.1+cpu
+torchvision==0.15.2+cpu
+--find-links https://download.pytorch.org/whl/torch_stable.html
+typing-extensions<4.6.0
 mtcnn
-tensorflow
 fastapi
 uvicorn
 python-multipart
