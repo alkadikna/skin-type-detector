@@ -3,8 +3,8 @@ from bson.objectid import ObjectId
 from datetime import datetime
 import os
 
-# MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
-MONGO_URL = os.getenv("MONGO_URL", "mongodb://host.docker.internal:27017")
+MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
+# MONGO_URL = os.getenv("MONGO_URL", "mongodb://mongodb:27017")
 DATABASE_NAME = "skin-type-detector"
 COLLECTION_NAME = "skin-type-db"
 
