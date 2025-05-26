@@ -47,7 +47,7 @@ class FeedbackRequest(BaseModel):
     actual_skin_type: str
 
 # Load model dari file
-model_files = glob.glob(os.path.join("app", "models", "facial_model_*.pkl"))
+model_files = glob.glob(os.path.join("app", "models", "facial_model_cpu.pkl"))
 if not model_files:
     raise Exception("No model files found. Please train the model first.")
 
