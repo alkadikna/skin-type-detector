@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
-import { View, Image, Text, Button, ActivityIndicator, StyleSheet } from 'react-native';
-import * as FileSystem from 'expo-file-system';
-import axios from 'axios';
+import background from '@assets/images/background.png';
+import { CameraScreen } from '@components/CameraView';
 import { API_BASE_URL } from '@constants/config';
 import { useCameraPermission } from '@hooks/useCameraPermission';
-import { CameraScreen } from '@components/CameraView';
+import axios from 'axios';
+import * as FileSystem from 'expo-file-system';
+import React, { useState } from 'react';
+import { ActivityIndicator, Button, Image, ImageBackground, StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 
 const Home = () => {
   const hasPermission = useCameraPermission();
@@ -47,28 +48,40 @@ const Home = () => {
   if (hasPermission === false) return <Text>Permission denied</Text>;
 
   return (
-    <View style={styles.container}>
+    <ImageBackground source={background} style={styles.container}>
+      <Text style={styles.header}>Skinalyze</Text>
+
       {!imageUri ? (
+        // Render camera view
         <CameraScreen onPictureTaken={(uri) => { setImageUri(uri); uploadImage(uri); }} />
       ) : (
-        <>
-          <Image source={{ uri: imageUri }} style={styles.preview} />
-          <Button title="Retake" onPress={() => { setImageUri(null); setResult(null); }} />
-        </>
+        // Render image preview and result
+        <View style={styles.resultContainer}>
+            <Image source={{ uri: imageUri }} style={styles.preview} />
+          
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() => {
+              setImageUri(null);
+              setResult(null);
+            }}
+          >
+            <Text style={styles.buttonText}>Retake</Text>
+          </TouchableOpacity>
+        </View>
       )}
 
-      {loading && <ActivityIndicator size="large" />}
+      {loading && <ActivityIndicator size="large" color="#555" />}
       {result && !loading && (
-          <View>
-            <Text style={styles.result}>Skin Type: {result}</Text>
-            {confidence !== null && (
-              <Text style={styles.result}>Confidence: {(confidence * 100).toFixed(2)}%</Text>
-            )}
-            {message && <Text style={styles.result}>Message: {message}</Text>}
-          </View>
+        <View style={styles.resultBackground}>
+          <Text style={styles.result}>Skin Type: {result}</Text>
+          {confidence !== null && (
+            <Text style={styles.result}>Confidence: {(confidence * 100).toFixed(2)}%</Text>
+          )}
+        </View>
       )}
 
-    </View>
+    </ImageBackground>
   );
 };
 
@@ -76,6 +89,62 @@ export default Home
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 10, justifyContent: 'center' },
-  preview: { width: '100%', height: 400, resizeMode: 'contain', marginVertical: 10 },
-  result: { fontSize: 20, textAlign: 'center', marginTop: 10 },
+  header: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#FFF8E1',
+    textAlign: 'center',
+    paddingVertical: 12,
+    borderTopLeftRadius: 40,
+    borderTopRightRadius: 40,
+    marginBottom: 10,
+  },
+  preview: {
+    width: '85%',
+    height: 400,
+    borderRadius: 20,
+    overflow: 'hidden',
+    marginVertical: 20,
+    backgroundColor: '#000',
+    alignSelf: 'center',
+    borderWidth: 2,
+    borderColor: '#FFF8E1',
+    resizeMode: 'cover', // changed from 'contain' to 'cover'
+  },
+  result: {
+    fontSize: 20,
+    textAlign: 'center',
+    marginTop: 10,
+    color: '#333',
+  },
+  button: {
+    backgroundColor: '#FC9B78',
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    alignSelf: 'center',
+    marginBottom: 30,
+  },
+  buttonText: {
+    color: '#FFF8E1',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  resultContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resultBackground:{
+    backgroundColor: '#FC9B78',
+    borderRadius: 18,
+    padding: 18,
+    marginHorizontal: 24,
+    marginTop: 10,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
+  }
 });
